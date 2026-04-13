@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Aperture — Guilloché Design Studio</title>
+<style>
+  :root{
+    --bg:#f4f7fb;
+    --panel:#ffffff;
+    --accent:#5b8cff;
+    --muted:#95a5a6;
+    --dark:#2c3e50;
+    --soft:#eaf2ff;
+    --left-width:20%;
+    --center-width:60%;
+    --right-width:20%;
+    --mono: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  html,body{height:100%;margin:0;font-family:var(--mono);background:linear-gradient(180deg,#f6f9ff 0%,var(--bg) 100%);}
+  .app{display:flex;height:100vh;gap:12px;padding:12px;box-sizing:border-box;}
+  .panel{background:var(--panel);border-radius:12px;box-shadow:0 6px 18px rgba(20,30,60,0.06);padding:12px;display:flex;flex-direction:column;overflow:hidden}
+  .left{width:var(--left-width);min-width:220px;max-width:350px}
+  .center{flex:1;min-width:600px;padding:0;background:var(--dark);display:flex;align-items:center;justify-content:center}
+  .right{width:var(--right-width);min-width:260px;max-width:360px}
+  .header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .title{font-weight:700;color:var(--dark);font-size:16px}
+  .subtitle{color:var(--muted);font-size:12px}
+  .layers-list{flex:1;overflow:auto;margin-top:8px;border-radius:8px;padding:8px;background:linear-gradient(180deg,#ffffff,#fcfdff);border:1px solid rgba(15,20,40,0.03)}
+  .layer-item{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;margin-bottom:6px;cursor:pointer;border:1px solid transparent}
+  .layer-item:hover{background:#fbfdff;border-color:rgba(88,120,255,0.06)}
+  .layer-item.selected{box-shadow:inset 0 0 0 2px rgba(91,140,255,0.09);background:linear-gradient(90deg,#f7fbff,#ffffff)}
+  .layer-info{display:flex;align-items:center;gap:8px}
+  .eye{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px}
+  .controls{display:flex;gap:8px;padding-top:8px}
+  button.btn{background:var(--soft);border:1px solid rgba(91,140,255,0.12);padding:8px;border-radius:8px;cursor:pointer;font-weight:600}
+  button.btn.ghost{background:transparent;border:1px solid rgba(0,0,0,0.06)}
+  .canvas-wrap{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+  svg#studio-svg{width:100%;height:100%;display:block;box-sizing:border-box}
+  .inspector{overflow:auto;padding:8px;gap:8px}
+  .prop-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .prop-row label{min-width:110px;font-size:13px;color:#33475b}
+  input[type="range"]{flex:1}
+  input[type="number"]{width:88px;padding:6px;border-radius:6px;border:1px solid rgba(15,20,40,0.06)}
+  input[type="color"]{width:44px;height:34px;border:0;padding:0;background:transparent}
+  .muted{color:var(--muted);font-size:12px}
+  .top-actions{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .export-controls{display:flex;gap:8px;align-items:center;margin-left:auto}
+  .btn-icon{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:white;cursor:pointer}
+  .small{font-size:12px;padding:6px 8px}
+  .layer-meta{font-size:12px;color:var(--muted)}
+  footer.note{font-size:12px;color:var(--muted);text-align:center;padding:6px}
+  .inline{display:inline-flex;align-items:center;gap:6px}
+  /* SVG default styling for crispness */
+  svg{image-rendering:optimizeSpeed;shape-rendering:geometricPrecision;overflow:visible}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel left">
+    <div class="header">
+      <div>
+        <div class="title">Layers</div>
+        <div class="subtitle">Layer stack — top is rendered last</div>
+      </div>
+      <div class="export-controls" style="margin-left:auto">
+        <select id="resolutionSelect" title="PNG resolution">
+          <option value="1">1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+        <button id="exportSvg" class="btn small">Export SVG</button>
+        <button id="exportPng" class="btn small">Export PNG</button>
+      </div>
+    </div>
+
+    <div class="layers-list" id="layersList"></div>
+
+    <div class="controls" style="margin-top:8px">
+      <button class="btn" id="addSpiro">+ Add Spiro</button>
+      <button class="btn" id="addRose">+ Add Rose</button>
+      <button class="btn" id="addBorder">+ Add Border</button>
+      <button class="btn" id="activateDemo">Activate Demo</button>
+      <button class="btn" id="resetStudio">Reset Studio</button>
+      <button class="btn ghost" id="deleteSelected" title="Delete selected">− Delete</button>
+    </div>
+    <div style="height:8px"></div>
+    <div class="muted" style="font-size:12px">Tip: click a layer to select & edit. Changes update immediately.</div>
+  </div>
+
+  <div class="panel center">
+    <div style="width:100%;height:100%;position:relative;border-radius:8px;overflow:hidden">
+      <div class="canvas-wrap" style="background:linear-gradient(180deg,#2b3f50,#22323f)">
+        <svg id="studio-svg" viewBox="-400 -300 800 600" preserveAspectRatio="xMidYMid meet">
+          <rect x="-400" y="-300" width="800" height="600" fill="#2c3e50"></rect>
+          <g id="layers-g" transform=""></g>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel right">
+    <div class="header">
+      <div>
+        <div class="title">Properties</div>
+        <div class="subtitle" id="propSubtitle">Select a layer to edit</div>
+      </div>
+    </div>
+    <div class="inspector" id="inspector">
+      <div class="muted">No layer selected.</div>
+    </div>
+    <footer class="note">Aperture — complexity made simple · live preview</footer>
+  </div>
+</div>
+
+<script>
+/* Aperture — Guilloché Design Studio
+   Single-file application: vanilla JS + SVG
+*/
+
+/* ---------- Global state: layer array ---------- */
+let layers = [];
+let selectedLayerId = null;
+
+/* Default viewBox size used by generators */
+const VIEWBOX = { x:-400, y:-300, w:800, h:600, cx:0, cy:0 };
+
+/* Utility helpers */
+const $ = (id)=>document.getElementById(id);
+const clamp = (v,a,b)=>Math.min(Math.max(v,a),b);
+const uniqueId = (prefix='L')=> prefix + '_' + Math.floor(Date.now() + Math.random()*1000);
+
+/* ---- Create default layer objects ---- */
+function defaultLayer(type){
+  const id = uniqueId(type);
+  if(type==='spiro'){
+    return {
+      id, name:`Spiro ${id}`, type:'spiro', visible:true,
+      params:{ R:160, r:45, d:100, revolutions:12, steps:4000 },
+      style:{ strokeColor:'#5b8cff', strokeWidth:1.25, fill:'none' },
+      modifiers:[/* example: {type:'wave', amplitude:6, frequency:20} */]
+    };
+  } else if(type==='rose'){
+    return {
+      id, name:`Rose ${id}`, type:'rose', visible:true,
+      params:{ n:5, d:2, amplitude:180, steps:3000 },
+      style:{ strokeColor:'#ff8a5b', strokeWidth:1.25, fill:'none' },
+      modifiers:[]
+    };
+  } else if(type==='border'){
+    return {
+      id, name:`Border ${id}`, type:'border', visible:true,
+      params:{ frequency:48, amplitude:8, shape:'sine', inset:12, steps:1600 },
+      style:{ strokeColor:'#00a896', strokeWidth:1.5, fill:'none' },
+      modifiers:[]
+    };
+  }
+}
+
+/* ----- Layer management ----- */
+function addLayer(type){
+  const l = defaultLayer(type);
+  layers.push(l);
+  selectLayer(l.id);
+  renderLayersList();
+  render();
+}
+function deleteSelected(){
+  if(!selectedLayerId) return;
+  layers = layers.filter(l=>l.id !== selectedLayerId);
+  selectedLayerId = layers.length? layers[layers.length-1].id : null;
+  renderLayersList();
+  renderInspector();
+  render();
+}
+function toggleVisible(id){
+  const l = layers.find(x=>x.id===id);
+  if(l){ l.visible = !l.visible; render(); renderLayersList(); }
+}
+function selectLayer(id){
+  selectedLayerId = id;
+  renderLayersList();
+  renderInspector();
+}
+
+/* ----- Rendering the left layers list ----- */
+function renderLayersList(){
+  const el = $('layersList'); el.innerHTML='';
+  // Top is 0 but render list so top layer appears on top visually — last is top
+  layers.forEach((layer, idx)=>{
+    const item = document.createElement('div');
+    item.className = 'layer-item' + (layer.id===selectedLayerId ? ' selected' : '');
+    item.onclick = ()=>selectLayer(layer.id);
+
+    const left = document.createElement('div'); left.className='layer-info';
+    const eye = document.createElement('div'); eye.className='eye'; eye.title = layer.visible ? 'Visible' : 'Hidden';
+    eye.innerHTML = layer.visible ? '👁️' : '🚫';
+    eye.onclick = (e)=>{ e.stopPropagation(); toggleVisible(layer.id); };
+
+    const meta = document.createElement('div');
+    const name = document.createElement('div'); name.textContent = layer.name;
+    name.style.fontWeight = 600;
+    const m2 = document.createElement('div'); m2.className='layer-meta'; m2.textContent = `${layer.type.toUpperCase()} • ${layer.style.strokeColor}`;
+    meta.appendChild(name); meta.appendChild(m2);
+
+    left.appendChild(eye); left.appendChild(meta);
+
+    const right = document.createElement('div');
+    const up = document.createElement('div'); up.className='inline';
+    const moveUp = document.createElement('button'); moveUp.innerText='↑'; moveUp.className='btn small'; moveUp.title='Move up'; moveUp.onclick=(e)=>{ e.stopPropagation(); moveLayer(idx, +1); };
+    const moveDown = document.createElement('button'); moveDown.innerText='↓'; moveDown.className='btn small'; moveDown.title='Move down'; moveDown.onclick=(e)=>{ e.stopPropagation(); moveLayer(idx, -1); };
+    up.appendChild(moveUp); up.appendChild(moveDown);
+    right.appendChild(up);
+
+    item.appendChild(left); item.appendChild(right);
+    el.appendChild(item);
+  });
+}
+function moveLayer(index, delta){
+  const newIndex = clamp(index + delta, 0, layers.length-1);
+  const [item] = layers.splice(index, 1);
+  layers.splice(newIndex, 0, item);
+  renderLayersList(); render();
+}
+
+/* ----- Inspector rendering ----- */
+function renderInspector(){
+  const inspector = $('inspector'); inspector.innerHTML='';
+  if(!selectedLayerId){
+    $('propSubtitle').textContent = 'Select a layer to edit';
+    inspector.innerHTML = '<div class="muted">No layer selected.</div>';
+    return;
+  }
+  const layer = layers.find(l=>l.id===selectedLayerId);
+  if(!layer) return;
+  $('propSubtitle').textContent = `${layer.name} — ${layer.type}`;
+
+  // Header / basic info
+  const nameRow = document.createElement('div'); nameRow.className='prop-row';
+  const nameLabel = document.createElement('label'); nameLabel.textContent='Name';
+  const nameInput = document.createElement('input'); nameInput.type='text'; nameInput.value=layer.name;
+  nameInput.oninput = ()=>{ layer.name = nameInput.value; renderLayersList(); };
+  nameRow.appendChild(nameLabel); nameRow.appendChild(nameInput);
+  inspector.appendChild(nameRow);
+
+  // Visibility
+  const visRow = document.createElement('div'); visRow.className='prop-row';
+  const visLabel = document.createElement('label'); visLabel.textContent='Visible';
+  const visChk = document.createElement('input'); visChk.type='checkbox'; visChk.checked = layer.visible;
+  visChk.oninput = ()=>{ layer.visible = visChk.checked; render(); renderLayersList(); };
+  visRow.appendChild(visLabel); visRow.appendChild(visChk);
+  inspector.appendChild(visRow);
+
+  // Params (dynamically create controls for params)
+  const paramsHeader = document.createElement('div'); paramsHeader.style.margin='8px 0'; paramsHeader.innerHTML='<strong>Parameters</strong>';
+  inspector.appendChild(paramsHeader);
+  for(const [key, val] of Object.entries(layer.params)){
+    inspector.appendChild(createParamControl(layer, key, val));
+  }
+
+  // Style controls
+  const styleHeader = document.createElement('div'); styleHeader.style.margin='8px 0'; styleHeader.innerHTML='<strong>Style</strong>';
+  inspector.appendChild(styleHeader);
+  // stroke color
+  const strokeRow = document.createElement('div'); strokeRow.className='prop-row';
+  const strokeLabel = document.createElement('label'); strokeLabel.textContent='Stroke';
+  const strokeColor = document.createElement('input'); strokeColor.type='color'; strokeColor.value=layer.style.strokeColor;
+  strokeColor.oninput = ()=>{ layer.style.strokeColor = strokeColor.value; render(); renderLayersList(); };
+  const strokeWidth = document.createElement('input'); strokeWidth.type='range'; strokeWidth.min=0; strokeWidth.max=8; strokeWidth.step=0.25; strokeWidth.value=layer.style.strokeWidth;
+  strokeWidth.oninput = ()=>{ layer.style.strokeWidth = parseFloat(strokeWidth.value); render(); };
+  strokeRow.appendChild(strokeLabel); strokeRow.appendChild(strokeColor); strokeRow.appendChild(strokeWidth);
+  inspector.appendChild(strokeRow);
+
+  // Fill (simple)
+  const fillRow = document.createElement('div'); fillRow.className='prop-row';
+  const fillLabel = document.createElement('label'); fillLabel.textContent='Fill';
+  const fillInput = document.createElement('input'); fillInput.type='color'; fillInput.value = layer.style.fill === 'none' ? '#ffffff' : layer.style.fill;
+  const fillToggle = document.createElement('input'); fillToggle.type='checkbox'; fillToggle.checked = layer.style.fill && layer.style.fill !== 'none';
+  fillToggle.oninput = ()=>{
+    layer.style.fill = fillToggle.checked ? (fillInput.value || '#ffffff') : 'none';
+    render();
+  };
+  fillInput.oninput = ()=>{
+    if(fillToggle.checked){ layer.style.fill = fillInput.value; render(); }
+  };
+  fillRow.appendChild(fillLabel); fillRow.appendChild(fillToggle); fillRow.appendChild(fillInput);
+  inspector.appendChild(fillRow);
+
+  // Modifiers
+  const modHeader = document.createElement('div'); modHeader.style.margin='8px 0'; modHeader.innerHTML='<strong>Modifiers</strong>';
+  inspector.appendChild(modHeader);
+  const modList = document.createElement('div');
+  layer.modifiers.forEach((m, idx)=>{
+    const row = document.createElement('div'); row.className='prop-row';
+    const lbl = document.createElement('label'); lbl.textContent = m.type;
+    const amp = document.createElement('input'); amp.type='number'; amp.value = m.amplitude || 0; amp.oninput = ()=>{ m.amplitude = parseFloat(amp.value)||0; render(); };
+    const freq = document.createElement('input'); freq.type='number'; freq.value = m.frequency || 0; freq.oninput = ()=>{ m.frequency = parseFloat(freq.value)||0; render(); };
+    const del = document.createElement('button'); del.className='btn small'; del.textContent='Remove'; del.onclick = ()=>{ layer.modifiers.splice(idx,1); renderInspector(); render(); };
+    row.appendChild(lbl); row.appendChild(amp); row.appendChild(freq); row.appendChild(del);
+    modList.appendChild(row);
+  });
+  inspector.appendChild(modList);
+
+  const addModRow = document.createElement('div'); addModRow.className='prop-row';
+  const addModLabel = document.createElement('label'); addModLabel.textContent='Add';
+  const addModSel = document.createElement('select'); ['wave'].forEach(t=>{ const o=document.createElement('option'); o.value=t; o.text=t; addModSel.appendChild(o); });
+  const addModBtn = document.createElement('button'); addModBtn.className='btn small'; addModBtn.textContent='Add'; addModBtn.onclick = ()=>{
+    const type = addModSel.value;
+    if(type==='wave') layer.modifiers.push({ type:'wave', amplitude:6, frequency:20 });
+    renderInspector(); render();
+  };
+  addModRow.appendChild(addModLabel); addModRow.appendChild(addModSel); addModRow.appendChild(addModBtn);
+  inspector.appendChild(addModRow);
+}
+
+/* Create a control for an individual param -- heuristics to choose input type */
+function createParamControl(layer, key, val){
+  const row = document.createElement('div'); row.className='prop-row';
+  const label = document.createElement('label'); label.textContent = key;
+  row.appendChild(label);
+
+  // pick type by key name
+  const numLike = ['R','r','d','revolutions','steps','amplitude','frequency','n','d','inset'];
+  if(typeof val === 'number'){
+    if(key.toLowerCase().includes('color')){
+      const input = document.createElement('input'); input.type='color'; input.value = val;
+      input.oninput = ()=>{ layer.params[key] = input.value; render(); };
+      row.appendChild(input);
+      return row;
+    }
+    // step & range heuristics
+    const inputRange = document.createElement('input'); inputRange.type='range';
+    const inputNum = document.createElement('input'); inputNum.type='number';
+    // ranges
+    let min = -500, max = 500, step = 1;
+    if(key==='R'){ min=10; max=800; step=1 }
+    if(key==='r'){ min=1; max=500; step=1 }
+    if(key==='d'){ min=0; max=800; step=1 }
+    if(key==='revolutions'){ min=1; max=200; step=1 }
+    if(key==='steps'){ min=50; max=12000; step=50 }
+    if(key==='amplitude'){ min=0; max=400; step=0.5 }
+    if(key==='frequency'){ min=1; max=800; step=1 }
+    if(key==='n' || key==='d'){ min=1; max=60; step=1 }
+    if(key==='inset'){ min=0; max=200; step=1 }
+
+    inputRange.min = min; inputRange.max = max; inputRange.step = step; inputRange.value = val;
+    inputNum.value = val; inputNum.step = step; inputNum.min = min; inputNum.max = max;
+    inputRange.oninput = ()=>{ inputNum.value = inputRange.value; layer.params[key] = parseFloat(inputRange.value); render(); };
+    inputNum.oninput = ()=>{ inputRange.value = inputNum.value; layer.params[key] = parseFloat(inputNum.value); render(); };
+    row.appendChild(inputRange); row.appendChild(inputNum);
+    return row;
+  } else if(typeof val === 'string'){
+    const input = document.createElement('input'); input.type='text'; input.value=val;
+    input.oninput = ()=>{ layer.params[key] = input.value; render(); };
+    row.appendChild(input);
+    return row;
+  } else {
+    const input = document.createElement('input'); input.type='text'; input.value = JSON.stringify(val);
+    input.disabled = true; row.appendChild(input); return row;
+  }
+}
+
+/* ---------- Pattern generation math ----------
+   Each generator returns an array of points [{x,y}] which then will be converted to an SVG path string.
+   This allows modifiers to work on points before path creation.
+*/
+
+/* Spiro: hypotrochoid/epitrochoid
+   R: fixed circle radius, r: rolling radius, d: offset from rolling center
+   If R > r: hypotrochoid; if r > R: epitrochoid. We'll handle general formula based on sign.
+*/
+function createSpiroPoints(params){
+  const R = +params.R || 150;
+  const r = +params.r || 45;
+  const d = +params.d || 100;
+  const revolutions = +params.revolutions || 12;
+  const steps = +params.steps || 4000;
+  // k = r/R
+  const gcd = (a,b)=>b?gcd(b,a%b):a;
+  // angle run
+  const total = Math.PI * 2 * revolutions;
+  const pts = [];
+  for(let i=0;i<=steps;i++){
+    const t = (i/steps) * total;
+    // classic hypotrochoid formula when rolling inside: x = (R-r)*cos t + d*cos(((R-r)/r)*t)
+    // and when rolling outside (epitrochoid): x = (R+r)*cos t - d*cos(((R+r)/r)*t)
+    let x,y;
+    if(R > r){
+      x = (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t);
+      y = (R - r) * Math.sin(t) - d * Math.sin(((R - r) / r) * t);
+    } else {
+      x = (R + r) * Math.cos(t) - d * Math.cos(((R + r) / r) * t);
+      y = (R + r) * Math.sin(t) - d * Math.sin(((R + r) / r) * t);
+    }
+    pts.push({x,y});
+  }
+  return pts;
+}
+
+/* Rose (Rhodonea): r = amplitude * cos(k*theta)
+   Parameters n (numerator), d (denominator) => k=n/d
+*/
+function createRosePoints(params){
+  const n = +params.n || 5;
+  const d = +params.d || 1;
+  const amplitude = +params.amplitude || 160;
+  const steps = +params.steps || 2000;
+  const k = n / d;
+  const pts = [];
+  const total = Math.PI * 2 * d; // ensure full cycle
+  for(let i=0;i<=steps;i++){
+    const t = (i/steps) * total;
+    const r = amplitude * Math.cos(k * t);
+    const x = r * Math.cos(t);
+    const y = r * Math.sin(t);
+    pts.push({x,y});
+  }
+  return pts;
+}
+
+/* Border path: generate perimeter points and apply a repeating wave along it.
+   We'll create a polygon following the rectangle perimeter with many segments.
+*/
+function createBorderPoints(params){
+  const frequency = +params.frequency || 48;
+  const amplitude = +params.amplitude || 8;
+  const shape = params.shape || 'sine';
+  const inset = +params.inset || 8;
+  const steps = +params.steps || 1000;
+
+  const left = VIEWBOX.x + inset, top = VIEWBOX.y + inset;
+  const right = VIEWBOX.x + VIEWBOX.w - inset, bottom = VIEWBOX.y + VIEWBOX.h - inset;
+  const perim = 2*(VIEWBOX.w - 2*inset) + 2*(VIEWBOX.h - 2*inset);
+  const pts = [];
+  // progress along perimeter 0..1
+  for(let i=0;i<=steps;i++){
+    const u = i/steps;
+    const dist = u * perim;
+    let x,y,angle;
+    if(dist < (right-left)){
+      // top edge left->right
+      const t = dist; x = left + t; y = top; angle = Math.PI/2;
+    } else if(dist < (right-left) + (bottom-top)){
+      // right edge top->bottom
+      const t = dist - (right-left); x = right; y = top + t; angle = Math.PI;
+    } else if(dist < (right-left)*2 + (bottom-top)){
+      // bottom edge right->left
+      const t = dist - (right-left) - (bottom-top); x = right - t; y = bottom; angle = -Math.PI/2;
+    } else {
+      // left edge bottom->top
+      const t = dist - 2*(right-left) - (bottom-top); x = left; y = bottom - t; angle = 0;
+    }
+    // wave offset perpendicular to edge
+    const wavePos = u * frequency * Math.PI * 2;
+    let offset = 0;
+    if(shape==='sine') offset = Math.sin(wavePos) * amplitude;
+    else if(shape==='arc') offset = (1 - Math.cos(wavePos)) * (amplitude/2);
+    // apply offset perpendicular
+    const nx = Math.cos(angle), ny = Math.sin(angle);
+    // perpendicular
+    const px = -ny, py = nx;
+    // add offset along perpendicular
+    pts.push({ x: x + px * offset, y: y + py * offset });
+  }
+  pts.push(pts[0]); // close
+  return pts;
+}
+
+/* Convert pts -> SVG path string (smooth-ish)
+   We'll construct a single 'M x y L x y L ... Z' to keep math crisp.
+*/
+function ptsToPath(pts, close=true){
+  if(!pts || pts.length===0) return '';
+  const d = pts.map((p,i)=> `${(i===0? 'M':'L')} ${p.x.toFixed(3)} ${p.y.toFixed(3)}`).join(' ');
+  return close ? (d + ' Z') : d;
+}
+
+/* Modifiers: currently only 'wave' implemented. It perturbs radial distance from center using sinusoid. */
+function applyModifiers(pts, layer){
+  if(!layer.modifiers || layer.modifiers.length===0) return pts;
+  let out = pts.map(p=>({x:p.x,y:p.y}));
+  layer.modifiers.forEach(m=>{
+    if(m.type === 'wave'){
+      const amp = +m.amplitude || 6;
+      const freq = +m.frequency || 16;
+      // compute polar position relative to center
+      out = out.map((p, idx) => {
+        const angle = Math.atan2(p.y - VIEWBOX.cy, p.x - VIEWBOX.cx);
+        // mod by index fraction to allow spatial variation
+        const u = idx / Math.max(1,out.length-1);
+        const displacement = Math.sin(angle * freq + u * Math.PI * 2) * amp;
+        // move point radially
+        const rx = p.x - VIEWBOX.cx, ry = p.y - VIEWBOX.cy;
+        const r = Math.sqrt(rx*rx + ry*ry);
+        const nr = Math.max(0, r + displacement);
+        return { x: VIEWBOX.cx + (rx/r || 0) * nr, y: VIEWBOX.cy + (ry/r || 0) * nr };
+      });
+    }
+    // Potential extension: other modifier types...
+  });
+  return out;
+}
+
+/* ---------- Master render() ----------
+   Clears SVG group and draws each visible layer in order.
+*/
+function render(){
+  const g = document.getElementById('layers-g');
+  // Clear children
+  while(g.firstChild) g.removeChild(g.firstChild);
+
+  // Iterate layers in order
+  layers.forEach((layer, idx) => {
+    if(!layer.visible) return;
+    let pts = [];
+    if(layer.type === 'spiro') pts = createSpiroPoints(layer.params);
+    else if(layer.type === 'rose') pts = createRosePoints(layer.params);
+    else if(layer.type === 'border') pts = createBorderPoints(layer.params);
+    // Apply modifiers
+    pts = applyModifiers(pts, layer);
+    const d = ptsToPath(pts, true);
+
+    // Create path
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', layer.style.fill || 'none');
+    path.setAttribute('stroke', layer.style.strokeColor || '#000');
+    path.setAttribute('stroke-width', layer.style.strokeWidth || 1);
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('data-layer-id', layer.id);
+    path.style.mixBlendMode = 'screen';
+    g.appendChild(path);
+  });
+}
+
+/* ---------- Exports ---------- */
+function exportSVG(){
+  const svg = document.getElementById('studio-svg');
+  // clone and prepare a cleaned SVG: remove UI-only elements (none) and adjust background rect color to white for export optionality
+  const clone = svg.cloneNode(true);
+  // optional: add white background rect for standalone file
+  const bg = clone.querySelector('rect');
+  if(bg) bg.setAttribute('fill','#ffffff');
+  // inlining computed CSS is not strict; keep simple
+  const serializer = new XMLSerializer();
+  const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(clone);
+  const blob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'aperture_design.svg'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 30000);
+}
+
+function exportPNG(multiplier=1){
+  const svg = document.getElementById('studio-svg');
+  const width = VIEWBOX.w * multiplier;
+  const height = VIEWBOX.h * multiplier;
+  // Serialize SVG
+  const clone = svg.cloneNode(true);
+  // put white background
+  const rect = clone.querySelector('rect');
+  if(rect) rect.setAttribute('fill','#ffffff');
+  // adjust viewBox & width/height on clone
+  clone.setAttribute('width', width);
+  clone.setAttribute('height', height);
+  // scale via transform on group
+  // We'll convert cloned SVG to xml, create image, draw into canvas scaled
+  const serializer = new XMLSerializer();
+  const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(clone);
+  const blob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = ()=>{
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    // High quality
+    ctx.imageSmoothingEnabled = true;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Draw image scaled: we must draw the full viewBox into canvas
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blobOut)=>{
+      const u = URL.createObjectURL(blobOut);
+      const a = document.createElement('a'); a.href = u; a.download = 'aperture_design.png'; a.click();
+      setTimeout(()=>URL.revokeObjectURL(u), 20000);
+    }, 'image/png');
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = (e)=>{ alert('Export failed — browser may block drawing SVG to canvas. Try allowing local file access or use Export SVG instead.'); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+/* ---------- Wire UI ---------- */
+document.getElementById('addSpiro').onclick = ()=>addLayer('spiro');
+document.getElementById('addRose').onclick = ()=>addLayer('rose');
+document.getElementById('addBorder').onclick = ()=>addLayer('border');
+document.getElementById('deleteSelected').onclick = ()=>{ deleteSelected(); };
+document.getElementById('activateDemo').onclick = ()=>{ initDemo(true); };
+document.getElementById('resetStudio').onclick = ()=>{
+  layers = [];
+  selectedLayerId = null;
+  renderLayersList();
+  renderInspector();
+  render();
+};
+
+document.getElementById('exportSvg').onclick = ()=>exportSVG();
+document.getElementById('exportPng').onclick = ()=>{
+  const mult = parseInt(document.getElementById('resolutionSelect').value || '1', 10);
+  exportPNG(mult);
+};
+
+/* keyboard shortcuts */
+window.addEventListener('keydown', (e)=>{
+  if(e.key === 'Delete' && selectedLayerId) { deleteSelected(); }
+  if(e.ctrlKey && e.key.toLowerCase() === 'd'){ // duplicate selected
+    if(selectedLayerId){
+      const orig = layers.find(l=>l.id===selectedLayerId);
+      if(orig){
+        const copy = JSON.parse(JSON.stringify(orig));
+        copy.id = uniqueId('copy'); copy.name = orig.name + ' copy';
+        layers.push(copy);
+        selectLayer(copy.id);
+        renderLayersList(); render();
+      }
+    }
+  }
+});
+
+/* ---------- Boot: populate with a couple of sample layers ---------- */
+function initDemo(clearFirst=false){
+  if(clearFirst){
+    layers = [];
+  }
+  // create a central rose and a spiro on top
+  layers.push(defaultLayer('border'));
+  layers.push(defaultLayer('spiro'));
+  layers.push(defaultLayer('rose'));
+  // tweak them slightly
+  layers[0].params.frequency = 64; layers[0].params.amplitude = 6; layers[0].style.strokeColor='#2dd4bf';
+  layers[1].params.R = 200; layers[1].params.r = 44; layers[1].params.d = 110; layers[1].style.strokeColor = '#5b8cff';
+  layers[1].modifiers.push({type:'wave', amplitude:4, frequency:18});
+  layers[2].params.n = 7; layers[2].params.d = 3; layers[2].params.amplitude = 170; layers[2].style.strokeColor='#ff8a8a';
+  selectLayer(layers[ layers.length -1 ].id);
+  renderLayersList();
+  renderInspector();
+  render();
+}
+
+initDemo();
+
+/* Responsiveness: adjust viewBox on resize (keep center). Optional improvements could be added. */
+window.addEventListener('resize', ()=>{
+  // No change to viewBox for now; preserve consistent coordinates for precise pattern math.
+});
+
+</script>
+</body>
+</html>
